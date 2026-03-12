@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+
+agriyield/data/processed/merged_train.pkl
+agriyield/data/processed/merged_recent.pkl
+agriyield/models/xgb_baseline.pkl

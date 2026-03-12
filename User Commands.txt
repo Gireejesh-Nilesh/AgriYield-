@@ -1,0 +1,19 @@
+1.Python Version
+ 
+=>python --version
+
+2.Install Packages
+
+=>pip install pandas numpy scikit-learn xgboost catboost tensorflow shap matplotlib streamlit joblib
+
+3.Train Models
+
+=>python agriyield/models/train_recommender.py
+
+=>python agriyield/models/train_hybrid.py
+
+=>python agriyield/models/train_model.py
+
+4. Run Streamlit app
+
+=> streamlit run agriyield/app/app.py

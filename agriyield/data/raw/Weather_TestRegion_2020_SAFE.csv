@@ -1,0 +1,7 @@
+git push -u origin mainsystem:index,date,rainfall_m,temperature_K,.geo
+0,2020-06-01,0.0049990118955691165,300.23627251232193,"{""type"":""MultiPoint"",""coordinates"":[]}"
+1,2020-07-01,0.007291562876749468,298.2598888923022,"{""type"":""MultiPoint"",""coordinates"":[]}"
+2,2020-07-31,0.00839520916411626,297.48011221918546,"{""type"":""MultiPoint"",""coordinates"":[]}"
+3,2020-08-30,0.005817531755862052,298.0906481154465,"{""type"":""MultiPoint"",""coordinates"":[]}"
+4,2020-09-29,0.008522677341619768,297.5371192066487,"{""type"":""MultiPoint"",""coordinates"":[]}"
+5,2020-10-29,7.40862595567918E-4,295.6789567013266,"{""type"":""MultiPoint"",""coordinates"":[]}"
