@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import os
 from pathlib import Path
 import numpy as np
 import tensorflow as tf
@@ -281,6 +282,8 @@ REC_PATH = MODELS_DIR / "crop_recommender.pkl"
 SOIL_LIST_PATH = MODELS_DIR / "soil_types_list.pkl"
 APP_DIR = Path(__file__).resolve().parent
 LOCAL_DASHBOARD_IMAGE = APP_DIR / "agriYield image.jpg"
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "").strip()
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "").strip()
 DASHBOARD_IMAGE_CANDIDATES = [
     LOCAL_DASHBOARD_IMAGE,
     BASE_DIR / "agriYield image.jpg",
@@ -296,9 +299,10 @@ apply_theme(st.session_state["theme_mode"])
 
 
 def get_live_weather(city):
-    API_KEY = "660d70370f1696132c0e3c5f7c76e6e1"
+    if not OPENWEATHER_API_KEY:
+        return None
     try:
-        url = f"http://api.openweathermap.org/data/2.5/weather?q={city},IN&appid={API_KEY}&units=metric"
+        url = f"http://api.openweathermap.org/data/2.5/weather?q={city},IN&appid={OPENWEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             data = response.json()
@@ -911,9 +915,6 @@ elif menu == " 📸 AI Plant Doctor":
         st.markdown("Upload a photo of your crop to identify diseases and get treatment advice.")
 
         
-        GOOGLE_API_KEY = "AIzaSyD9d6pGBqHCKzQcZh9iYXKwBh2XT5roTXo" 
-        
-        
         uploaded_file = st.file_uploader("Take a photo or upload", type=["jpg", "jpeg", "png"])
         
         if uploaded_file:
@@ -936,8 +937,8 @@ elif menu == " 📸 AI Plant Doctor":
             }
 
             if st.button("Analyze Plant", type="primary"):
-                if not GOOGLE_API_KEY or "YOUR_GEMINI" in GOOGLE_API_KEY:
-                    st.error("⚠️ API Key missing.")
+                if not GOOGLE_API_KEY:
+                    st.error("⚠️ GOOGLE_API_KEY is not set.")
                 else:
                     with st.spinner(f"🔬 AI is analyzing in {lang_choice}..."):
                         try:
