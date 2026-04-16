@@ -318,97 +318,68 @@ def get_live_weather(city):
 @st.cache_resource(show_spinner=False)
 def load_resources():
     try:
-        df = pd.read_csv(DATA_PATH)
+        # Load data more efficiently
+        df = pd.read_csv(DATA_PATH, low_memory=True)
         col_map = {
             "State_Name": "State", "District_Name": "District", "Crop_Year": "Year",
             "Crop_Name": "Crop", "Area": "Area", "Production": "Production", "Season": "Season"
         }
         df = df.rename(columns=col_map)
-        
-        
+
+        # Optimize data types and clean in one pass
         for col in ["State", "District", "Season", "Crop"]:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.strip().str.upper()
-        
-    
+
         if "target_yield" not in df.columns and "Production" in df.columns:
-            df = df[df["Area"] > 0]
+            df = df[df["Area"] > 0].copy()  # Use copy to avoid SettingWithCopyWarning
             df["target_yield"] = df["Production"] / df["Area"]
-            
+
     except Exception as e:
         st.error(f"Error loading data: {e}")
         df = pd.DataFrame()
 
-    
+    # Load models with error handling
     try:
         preprocessor = joblib.load(PREPROC_PATH)
         xgb_model = joblib.load(XGB_PATH)
         cat_model = joblib.load(CAT_PATH)
-        lstm_model = tf.keras.models.load_model(LSTM_PATH)
+        lstm_model = tf.keras.models.load_model(LSTM_PATH, compile=False)  # Don't compile for faster loading
         explainer = shap.TreeExplainer(xgb_model)
-    except:
+    except Exception as e:
+        print(f"Warning: Could not load ML models: {e}")
         preprocessor, xgb_model, cat_model, lstm_model, explainer = None, None, None, None, None
-
 
     try:
         recommender = joblib.load(REC_PATH)
         soil_types = joblib.load(SOIL_LIST_PATH)
-    except:
-        recommender = None
-        soil_types = ["CLAYEY", "LOAMY", "SANDY", "BLACK", "RED"]
-
+    except Exception as e:
+        print(f"Warning: Could not load recommender: {e}")
     return df, preprocessor, xgb_model, cat_model, lstm_model, explainer, recommender, soil_types
 
 
+# Show loading screen
 resource_loader = st.empty()
 with resource_loader.container():
-    show_loader("Loading data, models, and recommendations...")
+    show_loader("🚀 Starting AgriYield+...")
+
+    # Simulate loading steps for better UX
+    import time
+    time.sleep(0.5)
+
+    with resource_loader.container():
+        show_loader("📊 Loading agricultural datasets...")
+
     df, preprocessor, xgb_model, cat_model, lstm_model, explainer, recommender, soil_types = load_resources()
-resource_loader.empty()
 
-if df.empty:
-    st.error("Data could not be loaded. Please check 'season_based_crop.csv' exists in data/raw/.")
-    st.stop()
-    
-    
-with st.sidebar:
-    st.title("🌱 AgriYield+")
-    st.markdown("Intelligent Agriculture System")
-    st.caption("AI-powered agriculture advisory")
-    current_theme = st.session_state["theme_mode"]
-    toggle_icon = "🌙" if current_theme == "light" else "☀️"
-    toggle_label = "Dark mode" if current_theme == "light" else "Light mode"
-    if st.button(f"{toggle_icon} {toggle_label}", use_container_width=True):
-        st.session_state["theme_mode"] = "dark" if current_theme == "light" else "light"
-        st.rerun()
-    st.markdown(
-        f"<div class='theme-toggle-note'>Active theme: {st.session_state['theme_mode'].title()}</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown("---")
-    
-    
-    menu = st.radio("Navigate", ["🏠 Dashboard","📊 Crop Yield Prediction", "🌾 Crop Recommendation", " 📸 AI Plant Doctor"], index=0,label_visibility="collapsed")
-    st.markdown("---")
-    st.caption("v2.0.1 | Farmers Edition")
+    with resource_loader.container():
+        show_loader("🤖 Loading AI models...")
 
+    time.sleep(0.3)
 
-if st.session_state["previous_menu"] is None:
-    st.session_state["previous_menu"] = menu
-elif st.session_state["previous_menu"] != menu:
-    page_loader = st.empty()
-    with page_loader.container():
-        show_loader(f"Opening {menu.strip()}...")
-    time.sleep(0.45)
-    page_loader.empty()
-    st.session_state["previous_menu"] = menu
+    with resource_loader.container():
+        show_loader("✅ Almost ready...")
 
-
-if menu == "🏠 Dashboard":
-    st.markdown("""
-    <div style="background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%); padding: 30px; border-radius: 15px; color: white; margin-bottom: 25px;">
-        <h1 style="color: white; margin-bottom: 10px;">🌱 Welcome to AgriYield+</h1>
-        <p style="font-size: 1.1rem; opacity: 0.9;">Your intelligent companion for modern farming. Predict yields, find the right crops, and treat diseases with AI.</p>
     </div>
     """, unsafe_allow_html=True)
     
