@@ -569,6 +569,8 @@ elif menu == "📊 Crop Yield Prediction":
                 prediction_loader = st.empty()
                 with prediction_loader.container():
                     show_loader("Running hybrid yield prediction...")
+
+                try:
                     hist_yield = df[df["District"] == sel_dist]["target_yield"].mean()
                     if pd.isna(hist_yield):
                         hist_yield = 2.0
@@ -587,125 +589,126 @@ elif menu == "📊 Crop Yield Prediction":
                         "Soil_Type": [soil_inp]
                     })
 
+                    X_proc = preprocessor.transform(input_df)
+
+                    if hasattr(X_proc, "toarray"):
+                        X_proc = X_proc.toarray()
+
+                    p_xgb = xgb_model.predict(X_proc)[0]
+                    p_cat = cat_model.predict(X_proc)[0]
+
+                    X_lstm = X_proc.reshape((X_proc.shape[0], 1, X_proc.shape[1]))
+                    p_lstm = lstm_model.predict(X_lstm, verbose=0).flatten()[0]
+
+                    final_pred = (0.4 * p_xgb) + (0.4 * p_cat) + (0.2 * p_lstm)
+                    total_prod = final_pred * area_inp
+
+                    hist_subset = df[(df["District"] == sel_dist) & (df["Crop"] == sel_crop)]
+                    if not hist_subset.empty:
+                        last_hist_year = int(hist_subset["Year"].max())
+                    else:
+                        last_hist_year = int(sel_year) - 1
+
+                    forecast_years = list(range(last_hist_year + 1, int(sel_year) + 1))
+                    forecast_points = []
+                    for forecast_year in forecast_years:
+                        input_df_forecast = input_df.copy()
+                        input_df_forecast["Year"] = forecast_year
+                        X_forecast = preprocessor.transform(input_df_forecast)
+                        if hasattr(X_forecast, "toarray"):
+                            X_forecast = X_forecast.toarray()
+
+                        fxgb = xgb_model.predict(X_forecast)[0]
+                        fcat = cat_model.predict(X_forecast)[0]
+                        X_forecast_lstm = X_forecast.reshape((X_forecast.shape[0], 1, X_forecast.shape[1]))
+                        flstm = lstm_model.predict(X_forecast_lstm, verbose=0).flatten()[0]
+                        fhybrid = (0.4 * fxgb) + (0.4 * fcat) + (0.2 * flstm)
+                        forecast_points.append({"Year": forecast_year, "target_yield": float(fhybrid)})
+
+                    prediction_loader.empty()
+
+                    st.session_state["yield_forecast_series"] = {
+                        "district": sel_dist,
+                        "crop": sel_crop,
+                        "points": forecast_points
+                    }
+
+                    st.success(f"Predicted Yield: **{final_pred:.2f} tons/acre**")
+                    st.info(f"Total Expected Production: **{total_prod:.2f} tons**")
+
+                    st.subheader("Why this prediction?")
+
+                    if explainer is not None:
+                        shap_vals = explainer.shap_values(X_proc)
+                        vals = shap_vals[0]
+                    else:
+                        vals = np.zeros(X_proc.shape[1])
+
                     try:
-                        X_proc = preprocessor.transform(input_df)
+                        cat_encoder = preprocessor.named_transformers_["cat"]
+                        ohe_features = list(cat_encoder.get_feature_names_out())
+                        num_features = ["Year", "Area", "rainfall", "temperature", "ndvi"]
+                        feature_names = ohe_features + num_features
+                    except Exception:
+                        feature_names = [f"Feature {i}" for i in range(len(vals))]
 
-                        if hasattr(X_proc, "toarray"):
-                            X_proc = X_proc.toarray()
+                    if len(feature_names) != len(vals):
+                        feature_names = [f"Feature {i}" for i in range(len(vals))]
 
-                        p_xgb = xgb_model.predict(X_proc)[0]
-                        p_cat = cat_model.predict(X_proc)[0]
+                    impact_df = pd.DataFrame({
+                        "Feature": feature_names,
+                        "Impact": vals
+                    })
+                    impact_df["Abs_Impact"] = impact_df["Impact"].abs()
 
-                        X_lstm = X_proc.reshape((X_proc.shape[0], 1, X_proc.shape[1]))
-                        p_lstm = lstm_model.predict(X_lstm, verbose=0).flatten()[0]
+                    user_keywords = [
+                        sel_state.replace(" ", "_"),
+                        sel_dist.replace(" ", "_"),
+                        sel_crop.replace(" ", "_"),
+                        sel_season.replace(" ", "_"),
+                        "Area",
+                        "Year",
+                        "rainfall",
+                        "temperature",
+                        "ndvi"
+                    ]
 
-                        final_pred = (0.4 * p_xgb) + (0.4 * p_cat) + (0.2 * p_lstm)
-                        total_prod = final_pred * area_inp
-
-                        hist_subset = df[(df["District"] == sel_dist) & (df["Crop"] == sel_crop)]
-                        if not hist_subset.empty:
-                            last_hist_year = int(hist_subset["Year"].max())
-                        else:
-                            last_hist_year = int(sel_year) - 1
-
-                        forecast_years = list(range(last_hist_year + 1, int(sel_year) + 1))
-                        forecast_points = []
-                        for forecast_year in forecast_years:
-                            input_df_forecast = input_df.copy()
-                            input_df_forecast["Year"] = forecast_year
-                            X_forecast = preprocessor.transform(input_df_forecast)
-                            if hasattr(X_forecast, "toarray"):
-                                X_forecast = X_forecast.toarray()
-
-                            fxgb = xgb_model.predict(X_forecast)[0]
-                            fcat = cat_model.predict(X_forecast)[0]
-                            X_forecast_lstm = X_forecast.reshape((X_forecast.shape[0], 1, X_forecast.shape[1]))
-                            flstm = lstm_model.predict(X_forecast_lstm, verbose=0).flatten()[0]
-                            fhybrid = (0.4 * fxgb) + (0.4 * fcat) + (0.2 * flstm)
-                            forecast_points.append({"Year": forecast_year, "target_yield": float(fhybrid)})
-
-                        st.session_state["yield_forecast_series"] = {
-                            "district": sel_dist,
-                            "crop": sel_crop,
-                            "points": forecast_points
-                        }
-
-                        st.success(f"Predicted Yield: **{final_pred:.2f} tons/acre**")
-                        st.info(f"Total Expected Production: **{total_prod:.2f} tons**")
-
-                        st.subheader("Why this prediction?")
-
-                        if explainer is not None:
-                            shap_vals = explainer.shap_values(X_proc)
-                            vals = shap_vals[0]
-                        else:
-                            vals = np.zeros(X_proc.shape[1])
-
-                        try:
-                            cat_encoder = preprocessor.named_transformers_["cat"]
-                            ohe_features = list(cat_encoder.get_feature_names_out())
-                            num_features = ["Year", "Area", "rainfall", "temperature", "ndvi"]
-                            feature_names = ohe_features + num_features
-                        except Exception:
-                            feature_names = [f"Feature {i}" for i in range(len(vals))]
-
-                        if len(feature_names) != len(vals):
-                            feature_names = [f"Feature {i}" for i in range(len(vals))]
-
-                        impact_df = pd.DataFrame({
-                            "Feature": feature_names,
-                            "Impact": vals
-                        })
-                        impact_df["Abs_Impact"] = impact_df["Impact"].abs()
-
-                        user_keywords = [
-                            sel_state.replace(" ", "_"),
-                            sel_dist.replace(" ", "_"),
-                            sel_crop.replace(" ", "_"),
-                            sel_season.replace(" ", "_"),
-                            "Area",
-                            "Year",
-                            "rainfall",
-                            "temperature",
-                            "ndvi"
-                        ]
-
-                        filtered_df = impact_df[
-                            impact_df["Feature"].apply(
-                                lambda x: any(k in x for k in user_keywords)
-                            )
-                        ]
-
-                        if filtered_df.empty:
-                            filtered_df = impact_df.copy()
-
-                        top_features = filtered_df.sort_values(
-                            "Abs_Impact", ascending=False
-                        ).head(8)
-
-                        top_features["Feature"] = (
-                            top_features["Feature"]
-                            .str.replace("cat__", "", regex=False)
-                            .str.replace("State_", "", regex=False)
-                            .str.replace("District_", "", regex=False)
-                            .str.replace("Season_", "", regex=False)
-                            .str.replace("Crop_", "", regex=False)
-                            .str.replace("Soil_Type_", "", regex=False)
+                    filtered_df = impact_df[
+                        impact_df["Feature"].apply(
+                            lambda x: any(k in x for k in user_keywords)
                         )
+                    ]
 
-                        colors = ["#2ecc71" if x > 0 else "#e74c3c" for x in top_features["Impact"]]
+                    if filtered_df.empty:
+                        filtered_df = impact_df.copy()
 
-                        fig, ax = plt.subplots(figsize=(10, 4))
-                        bars = ax.barh(top_features["Feature"], top_features["Impact"], color=colors)
-                        ax.bar_label(bars, fmt="%.2f", padding=3)
-                        ax.axvline(0, color="black", linestyle="--", linewidth=0.8)
-                        ax.set_xlabel("Impact on Yield")
-                        plt.gca().invert_yaxis()
-                        st.pyplot(fig)
+                    top_features = filtered_df.sort_values(
+                        "Abs_Impact", ascending=False
+                    ).head(8)
 
-                    except Exception as e:
-                        st.error(f"Prediction Error: {e}")
-                prediction_loader.empty()
+                    top_features["Feature"] = (
+                        top_features["Feature"]
+                        .str.replace("cat__", "", regex=False)
+                        .str.replace("State_", "", regex=False)
+                        .str.replace("District_", "", regex=False)
+                        .str.replace("Season_", "", regex=False)
+                        .str.replace("Crop_", "", regex=False)
+                        .str.replace("Soil_Type_", "", regex=False)
+                    )
+
+                    colors = ["#2ecc71" if x > 0 else "#e74c3c" for x in top_features["Impact"]]
+
+                    fig, ax = plt.subplots(figsize=(10, 4))
+                    bars = ax.barh(top_features["Feature"], top_features["Impact"], color=colors)
+                    ax.bar_label(bars, fmt="%.2f", padding=3)
+                    ax.axvline(0, color="black", linestyle="--", linewidth=0.8)
+                    ax.set_xlabel("Impact on Yield")
+                    plt.gca().invert_yaxis()
+                    st.pyplot(fig)
+
+                except Exception as e:
+                    prediction_loader.empty()
+                    st.error(f"Prediction Error: {e}")
 
 
     with st.container():
@@ -769,80 +772,83 @@ elif menu == "🌾 Crop Recommendation":
                 recommendation_loader = st.empty()
                 with recommendation_loader.container():
                     show_loader("Finding the best crop recommendation...")
-                    try:
-                        pred_crop = recommender.predict(rec_input)[0]
-                        probs = recommender.predict_proba(rec_input)[0]
-                        
-                        st.divider()
-                        st.subheader(f"🌟 Best Crop: :green[{pred_crop}]")
-                        conf_score = max(probs)
-                        st.progress(conf_score, text=f"Confidence Score: {conf_score*100:.1f}%")
 
-                        st.markdown("### 💊 Fertilizer & Care Guide")
-                        fertilizer_map = {
-                            "RICE": "Urea (Nitrogen) & TSP. Maintain standing water level of 5cm.",
-                            "COTTON": "Balanced NPK (20-20-20). Requires good drainage.",
-                            "MAIZE": "Nitrogen rich fertilizer. Apply Zinc sulphate if leaves yellow.",
-                            "WHEAT": "DAP (Di-ammonium Phosphate) during sowing. Irrigate at critical stages.",
-                            "GROUNDNUT": "Gypsum/Calcium for pod formation. Avoid excess Nitrogen.",
-                            "SUGARCANE": "High Potassium. Heavy irrigation required every 10 days.",
-                            "BAJRA": "Low nutrient requirement. Apply Nitrogen in split doses.",
-                            "PULSES": "Phosphorus rich fertilizer. No Nitrogen needed (Self-fixing)."
-                        }
-                        advice = fertilizer_map.get(pred_crop.upper(), "Standard NPK (10-26-26) recommended. Monitor for pests.")
-                        
-                        col_adv1, col_adv2 = st.columns(2)
-                        with col_adv1:
-                            st.info(f"**Fertilizer:** {advice}")
-                        with col_adv2:
-                            if r_ph < 5.5:
-                                st.warning(f"**Soil Condition:** Your soil is Acidic (pH {r_ph}). Consider adding Lime.")
-                            elif r_ph > 7.5:
-                                st.warning(f"**Soil Condition:** Your soil is Alkaline (pH {r_ph}). Consider adding Gypsum.")
-                            else:
-                                st.success(f"**Soil Condition:** pH {r_ph} is optimal for most crops.")
+                try:
+                    pred_crop = recommender.predict(rec_input)[0]
+                    probs = recommender.predict_proba(rec_input)[0]
+                    recommendation_loader.empty()
 
-                        st.markdown("### 💡 Why this Recommendation?")
-                        reasons = []
-                        if r_soil in ["CLAYEY", "LOAMY"] and pred_crop in ["RICE", "SUGARCANE"]:
-                            reasons.append(f"• **{r_soil} Soil** retains moisture well, which is critical for {pred_crop}.")
-                        elif r_soil == "SANDY" and pred_crop in ["GROUNDNUT", "MAIZE", "BAJRA"]:
-                            reasons.append(f"• **{r_soil} Soil** offers good drainage, preventing root rot for {pred_crop}.")
-                        elif r_soil == "BLACK" and pred_crop in ["COTTON"]:
-                            reasons.append(f"• **Black Soil** is famous for Cotton cultivation due to moisture holding.")
+                    st.divider()
+                    st.subheader(f"🌟 Best Crop: {pred_crop}")
+                    conf_score = max(probs)
+                    st.progress(conf_score)
+                    st.caption(f"Confidence Score: {conf_score*100:.1f}%")
+
+                    st.markdown("### 💊 Fertilizer & Care Guide")
+                    fertilizer_map = {
+                        "RICE": "Urea (Nitrogen) & TSP. Maintain standing water level of 5cm.",
+                        "COTTON": "Balanced NPK (20-20-20). Requires good drainage.",
+                        "MAIZE": "Nitrogen rich fertilizer. Apply Zinc sulphate if leaves yellow.",
+                        "WHEAT": "DAP (Di-ammonium Phosphate) during sowing. Irrigate at critical stages.",
+                        "GROUNDNUT": "Gypsum/Calcium for pod formation. Avoid excess Nitrogen.",
+                        "SUGARCANE": "High Potassium. Heavy irrigation required every 10 days.",
+                        "BAJRA": "Low nutrient requirement. Apply Nitrogen in split doses.",
+                        "PULSES": "Phosphorus rich fertilizer. No Nitrogen needed (Self-fixing)."
+                    }
+                    advice = fertilizer_map.get(pred_crop.upper(), "Standard NPK (10-26-26) recommended. Monitor for pests.")
+                    
+                    col_adv1, col_adv2 = st.columns(2)
+                    with col_adv1:
+                        st.info(f"**Fertilizer:** {advice}")
+                    with col_adv2:
+                        if r_ph < 5.5:
+                            st.warning(f"**Soil Condition:** Your soil is Acidic (pH {r_ph}). Consider adding Lime.")
+                        elif r_ph > 7.5:
+                            st.warning(f"**Soil Condition:** Your soil is Alkaline (pH {r_ph}). Consider adding Gypsum.")
+                        else:
+                            st.success(f"**Soil Condition:** pH {r_ph} is optimal for most crops.")
+
+                    st.markdown("### 💡 Why this Recommendation?")
+                    reasons = []
+                    if r_soil in ["CLAYEY", "LOAMY"] and pred_crop in ["RICE", "SUGARCANE"]:
+                        reasons.append(f"• **{r_soil} Soil** retains moisture well, which is critical for {pred_crop}.")
+                    elif r_soil == "SANDY" and pred_crop in ["GROUNDNUT", "MAIZE", "BAJRA"]:
+                        reasons.append(f"• **{r_soil} Soil** offers good drainage, preventing root rot for {pred_crop}.")
+                    elif r_soil == "BLACK" and pred_crop in ["COTTON"]:
+                        reasons.append(f"• **Black Soil** is famous for Cotton cultivation due to moisture holding.")
                             
-                        if r_season == "KHARIF":
-                            reasons.append(f"• **Kharif Season** (Monsoon) provides the necessary rainfall.")
-                        elif r_season == "RABI":
-                            reasons.append(f"• **Rabi Season** (Winter) offers the cool, dry climate needed.")
+                    if r_season == "KHARIF":
+                        reasons.append(f"• **Kharif Season** (Monsoon) provides the necessary rainfall.")
+                    elif r_season == "RABI":
+                        reasons.append(f"• **Rabi Season** (Winter) offers the cool, dry climate needed.")
 
-                        if not reasons:
-                            reasons.append(f"• Historical farming data in **{r_dist}** shows high success rates for **{pred_crop}**.")
-                        
-                        for r in reasons:
-                            st.write(r)
+                    if not reasons:
+                        reasons.append(f"• Historical farming data in **{r_dist}** shows high success rates for **{pred_crop}**.")
+                    
+                    for r in reasons:
+                        st.write(r)
 
-                        st.markdown("### 🔄 Alternative Options")
-                        top3_idx = np.argsort(probs)[-3:][::-1]
-                        top_crops = [recommender.classes_[i] for i in top3_idx]
-                        top_probs = [probs[i] for i in top3_idx]
-                        
-                        c_chart1, c_chart2 = st.columns([1, 2])
-                        with c_chart1:
-                            for i, (crop, prob) in enumerate(zip(top_crops, top_probs)):
-                                st.metric(f"Option {i+1}", crop, f"{prob*100:.1f}%")
+                    st.markdown("### 🔄 Alternative Options")
+                    top3_idx = np.argsort(probs)[-3:][::-1]
+                    top_crops = [recommender.classes_[i] for i in top3_idx]
+                    top_probs = [probs[i] for i in top3_idx]
+                    
+                    c_chart1, c_chart2 = st.columns([1, 2])
+                    with c_chart1:
+                        for i, (crop, prob) in enumerate(zip(top_crops, top_probs)):
+                            st.metric(f"Option {i+1}", crop, f"{prob*100:.1f}%")
                                 
-                        with c_chart2:
-                            fig, ax = plt.subplots(figsize=(5, 3))
-                            wedges, texts, autotexts = ax.pie(top_probs, labels=top_crops, autopct='%1.1f%%', 
-                                                            colors=['#2ecc71', '#3498db', '#95a5a6'], 
-                                                            startangle=90, wedgeprops=dict(width=0.4))
-                            ax.set_title("Probability Distribution")
-                            st.pyplot(fig)
+                    with c_chart2:
+                        fig, ax = plt.subplots(figsize=(5, 3))
+                        wedges, texts, autotexts = ax.pie(top_probs, labels=top_crops, autopct='%1.1f%%', 
+                                                        colors=['#2ecc71', '#3498db', '#95a5a6'], 
+                                                        startangle=90, wedgeprops=dict(width=0.4))
+                        ax.set_title("Probability Distribution")
+                        st.pyplot(fig)
 
-                    except Exception as e:
-                        st.error(f"Prediction Error: {e}")
-                recommendation_loader.empty()
+                except Exception as e:
+                    recommendation_loader.empty()
+                    st.error(f"Prediction Error: {e}")
         st.markdown('</div>', unsafe_allow_html=True)
         
     with st.container():
