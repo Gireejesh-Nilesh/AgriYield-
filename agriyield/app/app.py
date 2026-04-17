@@ -297,6 +297,16 @@ if "previous_menu" not in st.session_state:
 
 apply_theme(st.session_state["theme_mode"])
 
+with st.sidebar:
+    st.title("🌱 AgriYield+")
+    menu = st.radio("Navigate", ["🏠 Dashboard", "📊 Crop Yield Prediction", "🌾 Crop Recommendation", "📸 AI Plant Doctor"])
+    
+    st.markdown("---")
+    theme_toggle = st.toggle("Dark Mode", value=(st.session_state["theme_mode"] == "dark"))
+    if theme_toggle != (st.session_state["theme_mode"] == "dark"):
+        st.session_state["theme_mode"] = "dark" if theme_toggle else "light"
+        st.rerun()
+
 
 def get_live_weather(city):
     if not OPENWEATHER_API_KEY:
@@ -358,31 +368,57 @@ def load_resources():
     return df, preprocessor, xgb_model, cat_model, lstm_model, explainer, recommender, soil_types
 
 
+# Initialize session state for resources
+if "resources_loaded" not in st.session_state:
+    st.session_state["resources_loaded"] = False
+    st.session_state["df"] = None
+    st.session_state["preprocessor"] = None
+    st.session_state["xgb_model"] = None
+    st.session_state["cat_model"] = None
+    st.session_state["lstm_model"] = None
+    st.session_state["explainer"] = None
+    st.session_state["recommender"] = None
+    st.session_state["soil_types"] = None
+
+
 # Show loading screen
-resource_loader = st.empty()
-with resource_loader.container():
-    show_loader("🚀 Starting AgriYield+...")
-
-    # Simulate loading steps for better UX
-    import time
-    time.sleep(0.5)
-
-    with resource_loader.container():
-        show_loader("📊 Loading agricultural datasets...")
-
-    df, preprocessor, xgb_model, cat_model, lstm_model, explainer, recommender, soil_types = load_resources()
-
-    with resource_loader.container():
-        show_loader("🤖 Loading AI models...")
-
-    time.sleep(0.3)
-
-    with resource_loader.container():
-        show_loader("✅ Almost ready...")
-
-    </div>
-    """, unsafe_allow_html=True)
+if menu == "🏠 Dashboard":
+    if not st.session_state["resources_loaded"]:
+        resource_loader = st.container()
+        with resource_loader:
+            st.markdown('<div class="agri-loader-backdrop"></div>', unsafe_allow_html=True)
+            col = st.columns([1])[0]
+            with col:
+                st.markdown('<div class="agri-loader agri-loader--overlay"><div class="agri-loader__spinner"></div><div class="agri-loader__text">Loading resources...</div></div>', unsafe_allow_html=True)
+        
+        import time
+        time.sleep(0.5)
+        
+        # Load resources
+        df, preprocessor, xgb_model, cat_model, lstm_model, explainer, recommender, soil_types = load_resources()
+        
+        # Cache in session state
+        st.session_state["resources_loaded"] = True
+        st.session_state["df"] = df
+        st.session_state["preprocessor"] = preprocessor
+        st.session_state["xgb_model"] = xgb_model
+        st.session_state["cat_model"] = cat_model
+        st.session_state["lstm_model"] = lstm_model
+        st.session_state["explainer"] = explainer
+        st.session_state["recommender"] = recommender
+        st.session_state["soil_types"] = soil_types
+        
+        st.rerun()
     
+    # Use cached resources
+    df = st.session_state["df"]
+    preprocessor = st.session_state["preprocessor"]
+    xgb_model = st.session_state["xgb_model"]
+    cat_model = st.session_state["cat_model"]
+    lstm_model = st.session_state["lstm_model"]
+    explainer = st.session_state["explainer"]
+    recommender = st.session_state["recommender"]
+    soil_types = st.session_state["soil_types"]
     
     total_crops = len(df['Crop'].unique()) if not df.empty else 12
     total_districts = len(df['District'].unique()) if not df.empty else 30
@@ -449,10 +485,33 @@ with resource_loader.container():
 
 # TAB 1: YIELD PREDICTION
 elif menu == "📊 Crop Yield Prediction":
+    # Ensure resources are loaded
+    if not st.session_state["resources_loaded"]:
+        with st.spinner("Loading resources..."):
+            df, preprocessor, xgb_model, cat_model, lstm_model, explainer, recommender, soil_types = load_resources()
+            st.session_state["resources_loaded"] = True
+            st.session_state["df"] = df
+            st.session_state["preprocessor"] = preprocessor
+            st.session_state["xgb_model"] = xgb_model
+            st.session_state["cat_model"] = cat_model
+            st.session_state["lstm_model"] = lstm_model
+            st.session_state["explainer"] = explainer
+            st.session_state["recommender"] = recommender
+            st.session_state["soil_types"] = soil_types
+    
+    df = st.session_state["df"]
+    preprocessor = st.session_state["preprocessor"]
+    xgb_model = st.session_state["xgb_model"]
+    cat_model = st.session_state["cat_model"]
+    lstm_model = st.session_state["lstm_model"]
+    explainer = st.session_state["explainer"]
+    recommender = st.session_state["recommender"]
+    soil_types = st.session_state["soil_types"]
+    
     with st.container():
         st.markdown("""
         <div style="display: flex; align-items: center; margin-bottom: 20px;">
-            <span style="font-size: 2rem; margin-right: 15px; background: #e8f5e9; padding: 10px; border-radius: 12px;">📊</span>
+            <span style="font-size: 2rem; margin-right: 15px; background: #e8f5e9; padding: 10px; border-radius: 12px;">&#128200;</span>
             <h2 style="margin: 0;">Crop Yield Prediction</h2>
         </div>
         """, unsafe_allow_html=True)
@@ -703,16 +762,34 @@ elif menu == "📊 Crop Yield Prediction":
         if not trend_df.empty:
             st.line_chart(trend_df.set_index("Year")[["target_yield"]])
         else:
-            st.warning(f"⚠️ No historical data for **{sel_crop}** in **{sel_dist}**.")
+            st.warning(f"No historical data for **{sel_crop}** in **{sel_dist}**.")
         st.markdown('</div>', unsafe_allow_html=True)
 
 # TAB 2: CROP RECOMMENDATION
 elif menu == "🌾 Crop Recommendation":
+    # Ensure resources are loaded
+    if not st.session_state["resources_loaded"]:
+        with st.spinner("Loading resources..."):
+            df, preprocessor, xgb_model, cat_model, lstm_model, explainer, recommender, soil_types = load_resources()
+            st.session_state["resources_loaded"] = True
+            st.session_state["df"] = df
+            st.session_state["preprocessor"] = preprocessor
+            st.session_state["xgb_model"] = xgb_model
+            st.session_state["cat_model"] = cat_model
+            st.session_state["lstm_model"] = lstm_model
+            st.session_state["explainer"] = explainer
+            st.session_state["recommender"] = recommender
+            st.session_state["soil_types"] = soil_types
+    
+    df = st.session_state["df"]
+    recommender = st.session_state["recommender"]
+    soil_types = st.session_state["soil_types"]
+    
     with st.container():
         st.header("Find Suitable Crop & Advisory")
         st.markdown("""
         <div style="display: flex; align-items: center; margin-bottom: 20px;">
-            <span style="font-size: 2rem; margin-right: 15px; background: #e3f2fd; padding: 10px; border-radius: 12px;">🌾</span>
+            <span style="font-size: 2rem; margin-right: 15px; background: #e3f2fd; padding: 10px; border-radius: 12px;">&#127806;</span>
             <h2 style="margin: 0;">Get expert crop suggestions with fertilizer and care insights.</h2>
         </div>
         """, unsafe_allow_html=True)
@@ -876,15 +953,16 @@ elif menu == "🌾 Crop Recommendation":
             c2.metric("DAP (Phosphorus)", f"{dap_bags:.1f} Bags", "50kg each")
             c3.metric("MOP (Potassium)", f"{mop_bags:.1f} Bags", "50kg each")
             
-            st.warning(f"⚠️ **Note:** Adjust Urea dosage. Since DAP also provides Nitrogen, reduce Urea by {dap_bags * 0.4:.1f} bags.")            
+            st.warning(f"**Note:** Adjust Urea dosage. Since DAP also provides Nitrogen, reduce Urea by {dap_bags * 0.4:.1f} bags.")            
         st.markdown('</div>', unsafe_allow_html=True)
 
 # TAB 3: AI PLANT DOCTOR 
-elif menu == " 📸 AI Plant Doctor":
+elif menu == "📸 AI Plant Doctor":
+    # AI Plant Doctor doesn't need heavy ML models, just basic setup
     with st.container():
         st.markdown("""
         <div style="display: flex; align-items: center; margin-bottom: 20px;">
-            <span style="font-size: 2rem; margin-right: 15px; background: #fff3e0; padding: 10px; border-radius: 12px;">📸</span>
+            <span style="font-size: 2rem; margin-right: 15px; background: #fff3e0; padding: 10px; border-radius: 12px;">&#128248;</span>
             <h2 style="margin: 0;">AI Plant Doctor</h2>
         </div>
         """, unsafe_allow_html=True)
@@ -915,9 +993,9 @@ elif menu == " 📸 AI Plant Doctor":
 
             if st.button("Analyze Plant", type="primary"):
                 if not GOOGLE_API_KEY:
-                    st.error("⚠️ GOOGLE_API_KEY is not set.")
+                    st.error("GOOGLE_API_KEY is not set.")
                 else:
-                    with st.spinner(f"🔬 AI is analyzing in {lang_choice}..."):
+                    with st.spinner(f"AI is analyzing in {lang_choice}..."):
                         try:
                             genai.configure(api_key=GOOGLE_API_KEY)
                             
@@ -940,53 +1018,21 @@ elif menu == " 📸 AI Plant Doctor":
                                 else "User-provided crop hint: None (auto-detect from image)."
                             )
 
-                            prompt = f"""
-                            You are an expert agricultural assistant for farmers.
-                            {crop_hint_text}
-                            Analyze the uploaded plant image carefully and perform the following tasks:
-
-                            CRITICAL IDENTIFICATION RULES:
-                            - If a user crop hint is provided, treat it as primary context.
-                            - Do not relabel the crop to another type unless there is very strong visual evidence.
-                            - If uncertain between two crops, clearly say "uncertain" and ask for a clearer image.
-                            - Do not default to maize/corn when the image is ambiguous.
-
-                            1. Identify the plant name accurately (common name and local name if possible).
-                            2. Determine whether the plant is a crop, weed, or other plant.
-                            3. If it is a weed, briefly explain why it is harmful and how to control it.
-                            4. If the plant is a crop, analyze its overall health condition (healthy, weak, or severely affected).
-                            5. Detect any visible diseases, bacterial infections, fungal infections, viral infections, pest attacks, or nutrient deficiencies.
-                            6. Clearly mention which part of the plant is affected (leaf, stem, root, flower, or fruit).
-                            7. Explain the possible causes in simple words (weather conditions, soil quality, water stress, insects, or farming practices).
-                            8. Mention the stage of crop growth (seedling, vegetative, flowering, fruiting, or harvesting stage).
-                            9. Estimate the severity level of the problem (low, medium, or high).
-                            10. Explain how the issue may affect crop yield if not treated.
-                            11. Suggest practical treatment methods that are affordable and easy for farmers to apply.
-                            12. Recommend specific fertilizers, bio-fertilizers, or micronutrients to reduce the disease or deficiency, including:
-                                * Name of fertilizer
-                                * Purpose (disease control)
-                                * Application method (soil, foliar spray, drip)
-                            13. Search and provide an example of the best fertilizers available in the local market (e.g., common NPK mixes, micronutrient solutions).
-                            14. Provide dosage guidance in simple terms (per liter or per acre).
-                            15. Suggest preventive measures to avoid the problem in future crops.
-                            16. Mention safety precautions while using fertilizers or pesticides.
-                            17. If the image is unclear, politely ask the farmer to upload a clearer photo.
-
-                            Respond in simple language, avoid technical terms, and give step-by-step guidance suitable for farmers.
-                            {target_lang_instr}
-                            """
+                            base_prompt = "You are an expert agricultural assistant for farmers.\n"
+                            prompt = base_prompt + crop_hint_text + "\nAnalyze the uploaded plant image carefully and perform the following tasks:\n\nCRITICAL IDENTIFICATION RULES:\n- If a user crop hint is provided, treat it as primary context.\n- Do not relabel the crop to another type unless there is very strong visual evidence.\n- If uncertain between two crops, clearly say \"uncertain\" and ask for a clearer image.\n- Do not default to maize/corn when the image is ambiguous.\n\n1. Identify the plant name accurately (common name and local name if possible).\n2. Determine whether the plant is a crop, weed, or other plant.\n3. If it is a weed, briefly explain why it is harmful and how to control it.\n4. If the plant is a crop, analyze its overall health condition (healthy, weak, or severely affected).\n5. Detect any visible diseases, bacterial infections, fungal infections, viral infections, pest attacks, or nutrient deficiencies.\n6. Clearly mention which part of the plant is affected (leaf, stem, root, flower, or fruit).\n7. Explain the possible causes in simple words (weather conditions, soil quality, water stress, insects, or farming practices).\n8. Mention the stage of crop growth (seedling, vegetative, flowering, fruiting, or harvesting stage).\n9. Estimate the severity level of the problem (low, medium, or high).\n10. Explain how the issue may affect crop yield if not treated.\n11. Suggest practical treatment methods that are affordable and easy for farmers to apply.\n12. Recommend specific fertilizers, bio-fertilizers, or micronutrients to reduce the disease or deficiency, including:\n    * Name of fertilizer\n    * Purpose (disease control)\n    * Application method (soil, foliar spray, drip)\n13. Search and provide an example of the best fertilizers available in the local market (e.g., common NPK mixes, micronutrient solutions).\n14. Provide dosage guidance in simple terms (per liter or per acre).\n15. Suggest preventive measures to avoid the problem in future crops.\n16. Mention safety precautions while using fertilizers or pesticides.\n17. If the image is unclear, politely ask the farmer to upload a clearer photo.\n\nRespond in simple language, avoid technical terms, and give step-by-step guidance suitable for farmers.\n"
+                            prompt = prompt + target_lang_instr
                             
                             response = model.generate_content([prompt, image])
                             response_text = response.text
                             
                             
                             st.success("Analysis Complete!")
-                            with st.expander("🌿 Analysis Report", expanded=True):
+                            with st.expander("Analysis Report", expanded=True):
                                 st.markdown(response_text)
                                 
                             
                             st.divider()
-                            st.subheader(f"🔊 Listen (Summary)")
+                            st.subheader(f"Listen (Summary)")
                             
                             try:
                                 
